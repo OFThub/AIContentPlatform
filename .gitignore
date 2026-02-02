@@ -136,7 +136,4 @@ dist
 .pnp.*
 
 docker-compose.yml
-docker-compose.yml
-docker-compose.yml
 *.yml
-docker-compose.yml

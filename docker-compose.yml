@@ -7,31 +7,32 @@ services:
     container_name: ai_content_db
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres123
-      POSTGRES_DB: ai_content_platform
+      POSTGRES_PASSWORD: asdasd
+      POSTGRES_DB: ai_platform_db
     ports:
-      - "5432:5432"
+      - "5435:5432" # Dışarıyı 5435 yaptık (Çakışma bitti)
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ai_platform_db"]
+      interval: 5s
       timeout: 5s
       retries: 5
 
   # Redis cache
   redis:
+    restart: unless-stopped
     image: redis:7-alpine
     container_name: ai_content_redis
     ports:
-      - "6379:6379"
+      - "6380:6379" # Dışarıyı 6380 yaptık
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
+      interval: 5s
       timeout: 3s
       retries: 5
 
@@ -43,11 +44,12 @@ services:
       - "3001:3001"
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=postgresql://postgres:postgres123@postgres:5432/ai_content_platform
+      # DİKKAT: Host olarak 'postgres' (servis adı) kullanıldı
+      - DATABASE_URL=postgresql://postgres:asdasd@postgres:5432/ai_platform_db
       - REDIS_URL=redis://redis:6379
       - PORT=3001
-      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - JWT_SECRET=
+      - OPENAI_API_KEY=
     depends_on:
       postgres:
         condition: service_healthy
@@ -63,7 +65,7 @@ services:
     build: ./frontend
     container_name: ai_content_frontend
     ports:
-      - "3000:3000"
+      - "3010:3000" # Dışarıyı 3010 yaptık
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:3001
     depends_on:
