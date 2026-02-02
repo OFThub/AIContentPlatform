@@ -352,5 +352,3 @@ INSERT INTO tags (name, slug, usage_count) VALUES
 ('Node.js', 'nodejs', 35),
 ('Data Science', 'data-science', 42),
 ('Cloud', 'cloud', 30);
-
-COMMIT;

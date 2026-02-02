@@ -124,7 +124,7 @@ class ContentService {
    * Get contents with advanced filtering and pagination
    * Uses Window Functions for ranking
    */
-  async getContents(filters = {}) {
+async getContents(filters = {}) {
     const {
       page = 1,
       limit = 20,
@@ -168,31 +168,30 @@ class ContentService {
     
     const whereClause = conditions.join(' AND ');
     
-    // Build ORDER BY clause with window functions
+    // Build ORDER BY clause
     let orderByClause;
     let selectExtras = '';
     
     switch (sortBy) {
       case 'popular':
-        // Use window function to rank by popularity score
         selectExtras = `,
-          (c.view_count * 1 + c.like_count * 5 + c.share_count * 10) as popularity_score,
-          ROW_NUMBER() OVER (ORDER BY (c.view_count * 1 + c.like_count * 5 + c.share_count * 10) DESC) as popularity_rank`;
-        orderByClause = 'ORDER BY popularity_score DESC';
+          (c.view_count * 1 + c.like_count * 5 + c.share_count * 10) as popularity_score`;
+        // DÜZELTME: Artık dış sorguda fc kullanıyoruz
+        orderByClause = 'ORDER BY fc.popularity_score DESC';
         break;
         
       case 'trending':
-        // Trending: recent + popular combined
         selectExtras = `,
           (c.view_count * 1 + c.like_count * 5) / (EXTRACT(EPOCH FROM (NOW() - c.created_at)) / 3600 + 2) as trending_score`;
-        orderByClause = 'ORDER BY trending_score DESC';
+        // DÜZELTME: fc üzerinden sırala
+        orderByClause = 'ORDER BY fc.trending_score DESC';
         break;
         
       default: // recent
-        orderByClause = 'ORDER BY c.created_at DESC';
+        // DÜZELTME: c.created_at değil, fc.created_at
+        orderByClause = 'ORDER BY fc.created_at DESC';
     }
     
-    // Main query with CTE for better readability
     const queryText = `
       WITH filtered_contents AS (
         SELECT 
@@ -220,9 +219,9 @@ class ContentService {
       )
       SELECT 
         fc.*,
-        c.total
+        cnt.total
       FROM filtered_contents fc
-      CROSS JOIN counted c
+      CROSS JOIN counted cnt
       ${orderByClause}
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
@@ -233,7 +232,7 @@ class ContentService {
     
     return {
       contents: result.rows,
-      total: result.rows[0]?.total || 0,
+      total: parseInt(result.rows[0]?.total || 0),
       page,
       limit,
       totalPages: Math.ceil((result.rows[0]?.total || 0) / limit)
