@@ -17,24 +17,16 @@ export default function Navbar() {
             <span className="text-xl font-bold text-gray-900">ContentHub</span>
           </Link>
 
-          {/* Search Bar */}
-          <div className="flex-1 max-w-2xl mx-8">
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Search content or use AI semantic search..."
-                className="w-full px-4 py-2 pl-10 pr-4 text-gray-700 bg-gray-100 border border-transparent rounded-lg focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all"
-                onFocus={(e) => {
-                  // Navigate to search page on focus
-                  window.location.href = '/search';
-                }}
-              />
-              <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-            </div>
-          </div>
-
           {/* Navigation Links */}
           <div className="flex items-center space-x-6">
+            <Link
+              href="/search"
+              className="flex items-center space-x-1 text-gray-700 hover:text-primary-600 transition-colors"
+            >
+              <Search className="h-5 w-5" />
+              <span className="font-medium">Search</span>
+            </Link>
+
             <Link
               href="/trending"
               className="flex items-center space-x-1 text-gray-700 hover:text-primary-600 transition-colors"

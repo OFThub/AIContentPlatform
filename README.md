@@ -104,3 +104,6 @@ Geliştirme Notları
 + API çağrıları services/ altında toplanır
 
 + Proje ölçeklenebilir ve production-ready olacak şekilde planlanmıştır
+
+docker-compose down
+docker-compose up -d

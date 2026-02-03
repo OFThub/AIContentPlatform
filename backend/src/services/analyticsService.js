@@ -18,58 +18,57 @@ class AnalyticsService {
   async getTrendingAnalysis(days = 7, limit = 20) {
     const result = await query(
       `WITH daily_views AS (
-         SELECT 
-           content_id,
-           event_date,
-           COUNT(*) as view_count,
-           LAG(COUNT(*)) OVER (
-             PARTITION BY content_id 
-             ORDER BY event_date
-           ) as previous_day_views
-         FROM content_events
-         WHERE event_type = 'view' 
-           AND event_date >= CURRENT_DATE - $1
-         GROUP BY content_id, event_date
-       ),
-       trend_scores AS (
-         SELECT 
-           content_id,
-           SUM(view_count) as total_views,
-           AVG(view_count) as avg_daily_views,
-           MAX(view_count) as peak_views,
-           -- Calculate trend: (current - previous) / previous
-           AVG(
-             CASE 
-               WHEN previous_day_views > 0 
-               THEN (view_count - previous_day_views)::float / previous_day_views * 100
-               ELSE 0
-             END
-           ) as avg_daily_growth_percent
-         FROM daily_views
-         GROUP BY content_id
-       )
-       SELECT 
-         c.id,
-         c.title,
-         c.slug,
-         cat.name as category_name,
-         u.username,
-         ts.total_views,
-         ts.avg_daily_views,
-         ts.peak_views,
-         ts.avg_daily_growth_percent,
-         RANK() OVER (ORDER BY ts.avg_daily_growth_percent DESC) as trend_rank
-       FROM trend_scores ts
-       JOIN contents c ON ts.content_id = c.id
-       JOIN users u ON c.user_id = u.id
-       LEFT JOIN categories cat ON c.category_id = cat.id
-       WHERE c.status = 'published'
-         AND ts.total_views >= 10 -- Minimum threshold
-       ORDER BY ts.avg_daily_growth_percent DESC
-       LIMIT $2`,
+        SELECT 
+          content_id,
+          event_date,
+          COUNT(*) as view_count,
+          LAG(COUNT(*)) OVER (
+            PARTITION BY content_id 
+            ORDER BY event_date
+          ) as previous_day_views
+        FROM content_events
+        WHERE event_type = 'view' 
+          AND event_date >= CURRENT_DATE - ($1::int * INTERVAL '1 day')
+        GROUP BY content_id, event_date
+      ),
+      trend_scores AS (
+        SELECT 
+          content_id,
+          SUM(view_count) as total_views,
+          AVG(view_count) as avg_daily_views,
+          MAX(view_count) as peak_views,
+          AVG(
+            CASE 
+              WHEN previous_day_views > 0 
+              THEN (view_count - previous_day_views)::float / previous_day_views * 100
+              ELSE 0
+            END
+          ) as avg_daily_growth_percent
+        FROM daily_views
+        GROUP BY content_id
+      )
+      SELECT 
+        c.id,
+        c.title,
+        c.slug,
+        cat.name as category_name,
+        u.username,
+        ts.total_views,
+        ts.avg_daily_views,
+        ts.peak_views,
+        ts.avg_daily_growth_percent,
+        RANK() OVER (ORDER BY ts.avg_daily_growth_percent DESC) as trend_rank
+      FROM trend_scores ts
+      JOIN contents c ON ts.content_id = c.id
+      JOIN users u ON c.user_id = u.id
+      LEFT JOIN categories cat ON c.category_id = cat.id
+      WHERE c.status = 'published'
+        AND ts.total_views >= 10
+      ORDER BY ts.avg_daily_growth_percent DESC
+      LIMIT $2`,
       [days, limit]
     );
-    
+
     return result.rows;
   }
   
@@ -172,40 +171,36 @@ class AnalyticsService {
   async getContentPerformanceTimeseries(contentId, days = 30) {
     const result = await query(
       `WITH daily_metrics AS (
-         SELECT 
-           event_date,
-           COUNT(*) FILTER (WHERE event_type = 'view') as views,
-           COUNT(*) FILTER (WHERE event_type = 'like') as likes,
-           COUNT(*) FILTER (WHERE event_type = 'share') as shares
-         FROM content_events
-         WHERE content_id = $1
-           AND event_date >= CURRENT_DATE - $2
-         GROUP BY event_date
-         ORDER BY event_date
-       )
-       SELECT 
-         event_date,
-         views,
-         likes,
-         shares,
-         -- 7-day moving average
-         AVG(views) OVER (
-           ORDER BY event_date 
-           ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
-         ) as views_7day_avg,
-         -- Cumulative sum
-         SUM(views) OVER (
-           ORDER BY event_date 
-           ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-         ) as cumulative_views,
-         -- Compare with previous day
-         LAG(views) OVER (ORDER BY event_date) as previous_day_views,
-         -- Compare with next day (for context)
-         LEAD(views) OVER (ORDER BY event_date) as next_day_views
-       FROM daily_metrics`,
+        SELECT 
+          event_date,
+          COUNT(*) FILTER (WHERE event_type = 'view') as views,
+          COUNT(*) FILTER (WHERE event_type = 'like') as likes,
+          COUNT(*) FILTER (WHERE event_type = 'share') as shares
+        FROM content_events
+        WHERE content_id = $1
+          AND event_date >= CURRENT_DATE - ($2::int * INTERVAL '1 day')
+        GROUP BY event_date
+        ORDER BY event_date
+      )
+      SELECT 
+        event_date,
+        views,
+        likes,
+        shares,
+        AVG(views) OVER (
+          ORDER BY event_date 
+          ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+        ) as views_7day_avg,
+        SUM(views) OVER (
+          ORDER BY event_date 
+          ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) as cumulative_views,
+        LAG(views) OVER (ORDER BY event_date) as previous_day_views,
+        LEAD(views) OVER (ORDER BY event_date) as next_day_views
+      FROM daily_metrics`,
       [contentId, days]
     );
-    
+
     return result.rows;
   }
   

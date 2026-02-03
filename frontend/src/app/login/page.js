@@ -1,36 +1,39 @@
-import { useState } from 'react';
-import { useRouter } from 'next/router';
-import Link from 'next/link';
-import { useAuth } from '../contexts/AuthContext';
-import { LogIn, AlertCircle } from 'lucide-react';
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useAuth } from "../../contexts/AuthContext";
+import { LogIn, AlertCircle } from "lucide-react";
 
 export default function Login() {
   const router = useRouter();
   const { login } = useAuth();
+
   const [formData, setFormData] = useState({
-    username: '',
-    password: '',
+    username: "",
+    password: "",
   });
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
+    setError("");
     setLoading(true);
 
     try {
       await login(formData);
-      router.push('/');
+      router.replace("/"); // login'den sonra geri tuşuyla tekrar login'e dönmesin
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed');
+      setError(err?.response?.data?.message || "Login failed");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-primary-100 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-linear-to-br from-primary-50 to-primary-100 flex items-center justify-center px-4">
       <div className="max-w-md w-full">
         {/* Logo */}
         <div className="text-center mb-8">
@@ -45,7 +48,7 @@ export default function Login() {
         <div className="bg-white rounded-xl shadow-lg p-8">
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center space-x-2 text-red-700">
-              <AlertCircle className="h-5 w-5 flex-shrink-0" />
+              <AlertCircle className="h-5 w-5 shrink-0" />
               <span className="text-sm">{error}</span>
             </div>
           )}
@@ -61,7 +64,7 @@ export default function Login() {
                 className="input-field"
                 value={formData.username}
                 onChange={(e) =>
-                  setFormData({ ...formData, username: e.target.value })
+                  setFormData((prev) => ({ ...prev, username: e.target.value }))
                 }
               />
             </div>
@@ -76,7 +79,7 @@ export default function Login() {
                 className="input-field"
                 value={formData.password}
                 onChange={(e) =>
-                  setFormData({ ...formData, password: e.target.value })
+                  setFormData((prev) => ({ ...prev, password: e.target.value }))
                 }
               />
             </div>
@@ -86,14 +89,17 @@ export default function Login() {
               disabled={loading}
               className="w-full btn-primary py-3 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? "Signing in..." : "Sign In"}
             </button>
           </form>
 
           <div className="mt-6 text-center">
             <p className="text-gray-600">
-              Don't have an account?{' '}
-              <Link href="/register" className="text-primary-600 hover:text-primary-700 font-medium">
+              Don&apos;t have an account?{" "}
+              <Link
+                href="/register"
+                className="text-primary-600 hover:text-primary-700 font-medium"
+              >
                 Sign up
               </Link>
             </p>
@@ -102,7 +108,9 @@ export default function Login() {
 
         {/* Demo Credentials */}
         <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <p className="text-sm text-blue-800 font-medium mb-2">Demo Credentials:</p>
+          <p className="text-sm text-blue-800 font-medium mb-2">
+            Demo Credentials:
+          </p>
           <p className="text-xs text-blue-700">Username: john_doe</p>
           <p className="text-xs text-blue-700">Password: password123</p>
         </div>

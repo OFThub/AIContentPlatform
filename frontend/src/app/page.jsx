@@ -1,8 +1,11 @@
+'use client';
+
 import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import ContentCard from '../components/ContentCard';
 import { contentAPI, analyticsAPI } from '../services/api';
 import { TrendingUp, Clock, Star, Sparkles } from 'lucide-react';
+import React from 'react';
 
 export default function Home() {
   const [contents, setContents] = useState([]);
@@ -47,7 +50,7 @@ export default function Home() {
       {/* Hero Section */}
       <div className="text-center mb-12">
         <div className="flex justify-center mb-4">
-          <div className="p-3 bg-gradient-to-br from-primary-500 to-primary-700 rounded-2xl">
+          <div className="p-3 bg-linear-to-br from-primary-500 to-primary-700 rounded-2xl">
             <Sparkles className="h-8 w-8 text-white" />
           </div>
         </div>

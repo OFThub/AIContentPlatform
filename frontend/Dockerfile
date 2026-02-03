@@ -1,16 +1,11 @@
-FROM node:20-alpine
+FROM node:20-bookworm-slim
 
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
+RUN npm ci
 
-# Install dependencies
-RUN npm install
-
-# Copy source code
 COPY . .
 
-EXPOSE 3001
-
-CMD ["npm", "run", "dev"]
+EXPOSE 3000
+CMD ["npm","run","dev","--","-H","0.0.0.0","-p","3000"]
