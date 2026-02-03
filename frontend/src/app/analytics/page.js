@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import Layout from '../layout';
+import Layout from "../../components/Layout";
 import ContentCard from '../../components/ContentCard';
 import { analyticsAPI } from '../../services/api';
 import { TrendingUp, Users, BarChart3, Search, Award } from 'lucide-react';
