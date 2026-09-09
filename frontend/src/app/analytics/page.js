@@ -130,7 +130,7 @@ export default function AnalyticsPage() {
                       className={`px-2 py-1 text-xs font-medium rounded-full ${
                         search.search_type === 'semantic'
                           ? 'bg-primary-100 text-primary-700'
-                          : 'bg-blue-100 text-blue-700'
+                          : 'bg-primary-100 text-primary-700'
                       }`}
                     >
                       {search.search_type}

@@ -47,6 +47,20 @@ The app runs without an API key. Semantic search and AI generation return `503` 
 > Ports 3000/3001 already taken? Set `FRONTEND_PORT`, `BACKEND_PORT`,
 > `NEXT_PUBLIC_API_URL` and `CORS_ORIGIN` in `.env`, then rebuild.
 
+## Screenshots
+
+Taken against the stack that `docker compose up` produces, after `npm run seed` --
+no staging, no mockups.
+
+| | |
+| --- | --- |
+| ![Home](docs/screenshots/01-home.png) | ![Dashboard](docs/screenshots/02-dashboard.png) |
+| Browsing published content, sorted by recent, popular or trending. | Analytics from materialized views: totals, ranked authors, category breakdown. |
+
+![Article in dark mode](docs/screenshots/03-article-dark.png)
+
+An article in dark mode, signed in: view/like/share/bookmark actions and the comment thread.
+
 ## Features
 
 - **Semantic search** over pgvector with an HNSW index, alongside Postgres full-text keyword search.
@@ -66,7 +80,7 @@ The app runs without an API key. Semantic search and AI generation return `503` 
 | Database | PostgreSQL 17 + pgvector, range-partitioned event table, 3 materialized views |
 | Cache | Redis 7, cache-aside |
 | AI | Google Gemini through its OpenAI-compatible endpoint (free tier) |
-| Tests | `node:test` + supertest — 18 tests |
+| Tests | `node:test` + supertest — 19 tests |
 | CI | GitHub Actions — lint, tests against live Postgres + Redis, Docker build |
 
 ## Project structure

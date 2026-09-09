@@ -31,7 +31,15 @@ const USERS = [
 // Grouped so each author clears the HAVING COUNT(c.id) >= 3 bar in
 // mv_top_authors_by_category -- otherwise that view is permanently empty.
 const CONTENTS = [
-  ['demo', 'Technology', 'Vector Databases Explained', 'Vector databases index embeddings so you can search by meaning instead of keywords. pgvector adds this to Postgres with an HNSW index, which trades a little recall for a large speed win.', ['AI', 'Data Science']],
+  ['demo', 'Technology', 'Vector Databases Explained', `Vector databases index embeddings so you can search by meaning instead of keywords. A query for "how do I make my API faster" finds an article titled "Reducing p99 latency" even though the two share almost no words, because both land in the same region of a few hundred dimensions.
+
+pgvector adds this to Postgres directly, which matters more than it sounds. You keep one database, one backup story, one transaction boundary. The embedding lives in a column next to the row it describes, so a similarity search can join against categories, filter on status, and respect the same permissions as every other query. A dedicated vector store buys you scale you probably do not need yet, and costs you every join you already have.
+
+The index is where the trade-offs live. HNSW builds a navigable small-world graph: each vector links to a handful of near neighbours, and search walks the graph greedily from an entry point. It needs no training step, which makes it the right default until your table passes a few million rows. IVFFlat partitions the space into lists first and only scans the closest few, which is cheaper to build but needs a representative sample before it is any good.
+
+Two limits are worth knowing before you design the schema. HNSW caps at 2000 dimensions, so a model that emits 3072 has to be narrowed at request time rather than truncated afterwards. And the column width is fixed: changing embedding models means a migration, not a config flip.
+
+None of this is magic. An embedding is a learned coordinate system where distance approximates relatedness, and the database is doing nearest-neighbour search over it. The useful part is that the approximation is good enough, and that it now lives in the same place as the rest of your data.`, ['AI', 'Data Science']],
   ['demo', 'Technology', 'Why HNSW Beats IVFFlat for Small Datasets', 'HNSW builds a navigable small-world graph. It costs more to build but needs no training step, which makes it the better default until your table passes a few million rows.', ['AI', 'Data Science']],
   ['demo', 'Technology', 'Caching Strategies for Read-Heavy APIs', 'Cache-aside keeps the database authoritative and the cache disposable. The subtle part is invalidation scope: too broad and you thrash, too narrow and you serve stale rows.', ['Node.js', 'Cloud']],
   ['demo', 'Education', 'Reading a Query Plan Without Fear', 'EXPLAIN ANALYZE tells you what Postgres actually did, not what it planned to do. Start at the innermost node and work outward.', ['Data Science']],
@@ -52,6 +60,16 @@ const CONTENTS = [
   ['demo', 'Sports', 'Expected Goals, Explained Slowly', 'xG scores the quality of a chance rather than its outcome. Over a season it predicts better than goals do, which is exactly why it annoys people.', ['Data Science']],
   ['jane_smith', 'Education', 'Learning by Rebuilding', 'Reimplementing a tool you rely on is the fastest way to discover which of its features are essential and which are habit.', ['Machine Learning']],
 ];
+
+// A short discussion on the flagship article, so a fresh clone shows the
+// comment thread working rather than an empty section.
+const COMMENTS = [
+  ['jane_smith', 'The HNSW-vs-IVFFlat trade-off finally clicked for me here. The "no training step" point is the one nobody mentions.', 6],
+  ['mike_wilson', 'Worth adding that HNSW index build time grows fast past a few million rows -- we hit that wall last quarter.', 4],
+  ['john_doe', 'Does the 2000-dimension ceiling apply to IVFFlat too, or only HNSW?', 2],
+  ['demo', 'Only HNSW. IVFFlat will happily index wider vectors, you just pay for it on recall.', 1],
+];
+
 
 const slugFor = (title) => slugify(title, { lower: true, strict: true });
 
@@ -142,6 +160,30 @@ const seed = async () => {
     }
   }
   console.log(`contents: ${created} created, ${CONTENTS.length - created} already present`);
+
+  // Comments are inserted only when the thread is empty, so re-running the
+  // seed does not stack duplicates. comment_count is left to the trigger.
+  const flagship = await pool.query(
+    "SELECT id FROM contents WHERE slug = 'vector-databases-explained'"
+  );
+  if (flagship.rows.length > 0) {
+    const contentId = flagship.rows[0].id;
+    const { rows: existing } = await pool.query(
+      'SELECT COUNT(*)::int AS n FROM comments WHERE content_id = $1',
+      [contentId]
+    );
+    if (existing[0].n === 0) {
+      for (const [author, body, hoursAgo] of COMMENTS) {
+        await pool.query(
+          `INSERT INTO comments (content_id, user_id, body, created_at)
+           VALUES ($1, $2, $3, NOW() - ($4 || ' hours')::interval)`,
+          [contentId, userIds[author], body, String(hoursAgo)]
+        );
+      }
+      console.log(`comments: ${COMMENTS.length} added to the flagship article`);
+    }
+  }
+
 
   await pool.query('REFRESH MATERIALIZED VIEW mv_popular_contents');
   await pool.query('REFRESH MATERIALIZED VIEW mv_trending_contents');

@@ -137,3 +137,6 @@ dist
 
 # Allow example env files (real .env is ignored above)
 !.env.example
+
+# Playwright MCP scratch output
+.playwright-mcp/
