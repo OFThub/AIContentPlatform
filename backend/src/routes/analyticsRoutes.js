@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const analyticsController = require('../controllers/analyticsController');
-const { authMiddleware, optionalAuth } = require('../middleware/auth');
+const { authMiddleware, adminMiddleware } = require('../middleware/auth');
 const { longCache, mediumCache } = require('../middleware/cache');
 
 /**
@@ -63,7 +63,8 @@ router.get(
 // Admin endpoints
 router.post(
   '/refresh-views',
-  authMiddleware, // In production, add admin check
+  authMiddleware,
+  adminMiddleware,
   analyticsController.refreshMaterializedViews
 );
 

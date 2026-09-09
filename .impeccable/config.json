@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "border-accent-on-rounded",
+        "value": "*",
+        "files": [
+          "frontend/src/components/Spinner.js"
+        ],
+        "createdAt": "2026-09-08T06:34:06.992Z",
+        "reason": "User confirmed: rounded-full + border-b-2 is how the spinner is drawn. Every spinner in the app routes through this one component, so the waiver stays scoped to it."
+      }
+    ]
+  }
+}

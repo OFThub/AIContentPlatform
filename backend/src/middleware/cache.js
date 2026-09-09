@@ -46,7 +46,7 @@ const createCacheMiddleware = (options = {}) => {
       
       res.json = (data) => {
         // Store in cache (only successful responses)
-        if (res.statusCode === 200 && data.success !== false) {
+        if (res.statusCode === 200 && data && data.success !== false) {
           setCache(cacheKey, data, ttl).catch(err => {
             console.error('Cache set error:', err);
           });

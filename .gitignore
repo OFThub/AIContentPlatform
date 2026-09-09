@@ -135,5 +135,5 @@ dist
 .yarn/install-state.gz
 .pnp.*
 
-docker-compose.yml
-*.yml
+# Allow example env files (real .env is ignored above)
+!.env.example

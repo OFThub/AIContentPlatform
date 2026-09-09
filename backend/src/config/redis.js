@@ -38,14 +38,17 @@ redisClient.on('reconnecting', () => {
   console.log('🔄 Redis reconnecting...');
 });
 
-// Connect
-(async () => {
-  try {
-    await redisClient.connect();
-  } catch (error) {
-    console.error('Failed to connect to Redis:', error);
-  }
-})();
+/**
+ * Awaited by server.js at boot. The previous floating IIFE let module import
+ * resolve before the socket was up, so a failed connect produced a running
+ * server whose every cache read silently returned null.
+ */
+const initRedis = async () => {
+  if (redisClient.isOpen) return redisClient;
+  await redisClient.connect();
+  return redisClient;
+};
+
 
 /**
  * Cache Helper Functions
@@ -95,9 +98,10 @@ const delCache = async (key) => {
  */
 const delCachePattern = async (pattern) => {
   try {
-    const keys = await redisClient.keys(pattern);
-    if (keys.length > 0) {
-      await redisClient.del(keys);
+    // SCAN instead of KEYS: KEYS blocks the Redis main thread across the
+    // entire keyspace, and this runs on every content create/update/delete.
+    for await (const key of redisClient.scanIterator({ MATCH: pattern, COUNT: 100 })) {
+      await redisClient.del(key);
     }
     return true;
   } catch (error) {
@@ -194,6 +198,7 @@ const writeThrough = async (key, value, dbWriteFunction, ttl = 3600) => {
 
 module.exports = {
   redisClient,
+  initRedis,
   getCache,
   setCache,
   delCache,

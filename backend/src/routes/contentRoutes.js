@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const contentController = require('../controllers/contentController');
+const socialController = require('../controllers/socialController');
 const { authMiddleware, optionalAuth } = require('../middleware/auth');
 const { searchLimiter, createContentLimiter } = require('../middleware/rateLimiter');
 const { shortCache, mediumCache, longCache } = require('../middleware/cache');
@@ -33,7 +34,6 @@ router.get(
 router.get(
   '/:id',
   optionalAuth,
-  shortCache,
   contentController.getContent
 );
 
@@ -48,6 +48,14 @@ router.post(
   '/search/semantic',
   searchLimiter,
   contentController.semanticSearch
+);
+
+// AI generation. Same limiter as manual creation: both mint content.
+router.post(
+  '/generate',
+  authMiddleware,
+  createContentLimiter,
+  contentController.generateContent
 );
 
 // Protected routes (require authentication)
@@ -93,6 +101,26 @@ router.delete(
   '/:id/bookmark',
   authMiddleware,
   contentController.removeBookmark
+);
+
+// Comments. The comments table existed from day one but had no endpoints.
+// Placed before '/:id' style routes is unnecessary here because the segment
+// after the id is literal, so Express matches them unambiguously.
+router.get(
+  '/:id/comments',
+  socialController.getComments
+);
+
+router.post(
+  '/:id/comments',
+  authMiddleware,
+  socialController.addComment
+);
+
+router.delete(
+  '/comments/:commentId',
+  authMiddleware,
+  socialController.deleteComment
 );
 
 // Bookmarks

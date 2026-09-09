@@ -1,4 +1,5 @@
 const contentService = require('../services/contentService');
+const { isAiEnabled } = require('../config/openai');
 
 /**
  * Content Controller
@@ -44,6 +45,43 @@ class ContentController {
     }
   }
   
+  /**
+   * Generate content with AI
+   * POST /api/contents/generate
+   */
+  async generateContent(req, res) {
+    if (!isAiEnabled()) {
+      return res.status(503).json({
+        success: false,
+        message: 'AI features are unavailable: GEMINI_API_KEY is not configured.'
+      });
+    }
+
+    try {
+      const { topic, tone, length, categoryId, tags } = req.body;
+
+      if (!topic) {
+        return res.status(400).json({ success: false, message: 'Topic is required' });
+      }
+
+      const content = await contentService.generateContent(req.user.id, {
+        topic, tone, length, categoryId, tags
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'Content generated successfully',
+        data: content
+      });
+    } catch (error) {
+      console.error('Generate content error:', error);
+      res.status(error.status || 500).json({
+        success: false,
+        message: error.message || 'Failed to generate content'
+      });
+    }
+  }
+
   /**
    * Get content by ID
    * GET /api/contents/:id
@@ -98,7 +136,8 @@ class ContentController {
         userId: userId ? parseInt(userId) : undefined,
         contentType,
         sortBy,
-        search
+        search,
+        viewerId: req.user?.id ?? null
       });
       
       res.json({
@@ -301,7 +340,7 @@ class ContentController {
       });
     } catch (error) {
       console.error('Like content error:', error);
-      res.status(500).json({
+      res.status(error.status || 500).json({
         success: false,
         message: 'Failed to like content'
       });

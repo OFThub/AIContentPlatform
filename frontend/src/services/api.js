@@ -53,6 +53,11 @@ export const authAPI = {
   updateProfile: (updates) => apiClient.put("/auth/profile", updates),
   changePassword: (passwords) => apiClient.put("/auth/password", passwords),
   getUserProfile: (userId) => apiClient.get(`/auth/users/${userId}`),
+
+  // Follows
+  follow: (userId) => apiClient.post(`/auth/users/${userId}/follow`),
+  unfollow: (userId) => apiClient.delete(`/auth/users/${userId}/follow`),
+  getFollowStats: (userId) => apiClient.get(`/auth/users/${userId}/follow-stats`),
 };
 
 /**
@@ -90,6 +95,14 @@ export const contentAPI = {
   shareContent: (id) => apiClient.post(`/contents/${id}/share`),
   bookmarkContent: (id) => apiClient.post(`/contents/${id}/bookmark`),
   removeBookmark: (id) => apiClient.delete(`/contents/${id}/bookmark`),
+
+  // AI generation
+  generateContent: (data) => apiClient.post("/contents/generate", data),
+
+  // Comments
+  getComments: (id) => apiClient.get(`/contents/${id}/comments`),
+  addComment: (id, data) => apiClient.post(`/contents/${id}/comments`, data),
+  deleteComment: (commentId) => apiClient.delete(`/contents/comments/${commentId}`),
 
   // Bookmarks
   getBookmarks: (params) => apiClient.get("/contents/bookmarks/me", { params }),

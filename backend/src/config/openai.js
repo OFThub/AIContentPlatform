@@ -2,108 +2,129 @@ const OpenAI = require('openai');
 require('dotenv').config();
 
 /**
- * OpenAI Service for AI-Powered Features
- * 
- * Bu serviste:
- * - Text embedding generation (semantic search için)
- * - Content similarity calculation
- * - Semantic search queries
+ * AI provider: Google Gemini through its OpenAI-compatible endpoint.
+ *
+ * Gemini speaks the OpenAI wire protocol, so the `openai` SDK is used
+ * unchanged -- only the base URL, the model names and the key differ.
+ * Free tier, no card: https://aistudio.google.com/apikey
  */
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const BASE_URL = process.env.GEMINI_BASE_URL
+  || 'https://generativelanguage.googleapis.com/v1beta/openai/';
+const EMBEDDING_MODEL = process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-001';
+const CHAT_MODEL = process.env.GEMINI_CHAT_MODEL || 'gemini-2.5-flash';
 
 /**
- * Generate embedding for text
- * 
- * OpenAI'nin ada-002 modeli:
- * - 1536 dimensional vector
- * - Cost-effective
- * - Semantic meaning'i yakalıyor
- * 
- * @param {string} text - Text to embed
- * @returns {Array<number>} - 1536-dimensional vector
+ * pgvector's HNSW index tops out at 2000 dimensions and database/init.sql
+ * builds one, so Gemini's 3072-dimension default must be narrowed. This value
+ * must match the vector(N) column width in the schema.
+ */
+const EMBEDDING_DIMENSIONS = Number(process.env.GEMINI_EMBEDDING_DIMENSIONS || 768);
+
+/**
+ * Thrown when an AI feature is used without a configured key. Carries a status
+ * so the global error handler in app.js turns it into a 503 rather than a 500.
+ */
+class AiUnavailableError extends Error {
+  constructor() {
+    super('AI features are unavailable: GEMINI_API_KEY is not configured.');
+    this.name = 'AiUnavailableError';
+    this.status = 503;
+  }
+}
+
+const isAiEnabled = () => Boolean(process.env.GEMINI_API_KEY);
+
+/**
+ * Built on first use, not at import time. Constructing the client eagerly meant
+ * a missing key threw while `require`-ing this module, taking down the whole
+ * API instead of just the AI endpoints.
+ */
+let client = null;
+const getClient = () => {
+  if (!isAiEnabled()) throw new AiUnavailableError();
+  if (!client) {
+    client = new OpenAI({ apiKey: process.env.GEMINI_API_KEY, baseURL: BASE_URL });
+  }
+  return client;
+};
+
+const clean = (text) => String(text).replace(/\s+/g, ' ').trim().substring(0, 8000);
+
+/**
+ * Generate an embedding vector for text.
+ * @param {string} text
+ * @returns {Promise<Array<number>>} EMBEDDING_DIMENSIONS-long vector
  */
 const generateEmbedding = async (text) => {
+  const openai = getClient();
   try {
-    // Clean and prepare text
-    const cleanText = text
-      .replace(/\s+/g, ' ') // Multiple spaces -> single space
-      .trim()
-      .substring(0, 8000); // OpenAI limit
-    
     const response = await openai.embeddings.create({
-      model: 'text-embedding-ada-002',
-      input: cleanText,
+      model: EMBEDDING_MODEL,
+      input: clean(text),
+      dimensions: EMBEDDING_DIMENSIONS,
     });
-    
     return response.data[0].embedding;
   } catch (error) {
-    console.error('Error generating embedding:', error);
-    throw new Error('Failed to generate embedding');
+    console.error('Error generating embedding:', error.message);
+    throw new Error('Failed to generate embedding', { cause: error });
   }
 };
 
 /**
- * Generate embeddings for multiple texts (batch)
- * More efficient for bulk operations
+ * Generate article-style content from a prompt.
+ * @param {{topic: string, tone?: string, length?: string}} options
+ * @returns {Promise<{title: string, body: string}>}
  */
-const generateEmbeddingsBatch = async (texts) => {
+const generateContent = async ({ topic, tone = 'neutral', length = 'medium' }) => {
+  const openai = getClient();
+  const words = { short: 150, medium: 400, long: 800 }[length] || 400;
+
   try {
-    const cleanTexts = texts.map(text => 
-      text.replace(/\s+/g, ' ').trim().substring(0, 8000)
-    );
-    
-    const response = await openai.embeddings.create({
-      model: 'text-embedding-ada-002',
-      input: cleanTexts,
+    const response = await openai.chat.completions.create({
+      model: CHAT_MODEL,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are a content writer. Reply with strict JSON only, no code fences: ' +
+            '{"title": string, "body": string}. The body is markdown.',
+        },
+        {
+          role: 'user',
+          content: `Write a ${tone} article of roughly ${words} words about: ${topic}`,
+        },
+      ],
+      response_format: { type: 'json_object' },
     });
-    
-    return response.data.map(item => item.embedding);
+
+    const raw = response.choices[0]?.message?.content ?? '';
+    const parsed = JSON.parse(raw);
+    if (!parsed.title || !parsed.body) throw new Error('missing title or body');
+    return { title: String(parsed.title), body: String(parsed.body) };
   } catch (error) {
-    console.error('Error generating embeddings batch:', error);
-    throw new Error('Failed to generate embeddings batch');
+    console.error('Error generating content:', error.message);
+    throw new Error('Failed to generate content', { cause: error });
   }
 };
 
 /**
- * Calculate cosine similarity between two vectors
- * Used for finding similar content
- * 
- * @param {Array<number>} vec1 
- * @param {Array<number>} vec2 
- * @returns {number} Similarity score (0-1)
+ * pgvector accepts a bracketed literal, not a JS array.
  */
-const cosineSimilarity = (vec1, vec2) => {
-  const dotProduct = vec1.reduce((sum, val, i) => sum + val * vec2[i], 0);
-  const magnitude1 = Math.sqrt(vec1.reduce((sum, val) => sum + val * val, 0));
-  const magnitude2 = Math.sqrt(vec2.reduce((sum, val) => sum + val * val, 0));
-  
-  return dotProduct / (magnitude1 * magnitude2);
-};
+const formatEmbeddingForDB = (embedding) => `[${embedding.join(',')}]`;
 
 /**
- * Format embedding for PostgreSQL
- * PostgreSQL pgvector expects array format
+ * Title carries more signal than body, so it is weighted by repetition.
  */
-const formatEmbeddingForDB = (embedding) => {
-  return `[${embedding.join(',').toString()}]`;
-};
-
-/**
- * Prepare content for embedding
- * Combines title and body with weights
- */
-const prepareContentForEmbedding = (title, body) => {
-  // Title is more important, repeat it
-  return `${title} ${title} ${body}`.substring(0, 8000);
-};
+const prepareContentForEmbedding = (title, body) =>
+  `${title} ${title} ${body}`.substring(0, 8000);
 
 module.exports = {
   generateEmbedding,
-  generateEmbeddingsBatch,
-  cosineSimilarity,
+  generateContent,
   formatEmbeddingForDB,
-  prepareContentForEmbedding
+  prepareContentForEmbedding,
+  isAiEnabled,
+  AiUnavailableError,
+  EMBEDDING_DIMENSIONS,
 };

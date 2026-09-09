@@ -164,7 +164,7 @@ class AuthService {
       params.push(fullName);
     }
     if (bio !== undefined) {
-      updateFields.push(`bio = $${paramIndex++}`);
+      updateFields.push(`bio = $${paramIndex}`);
       params.push(bio);
     }
     if (avatarUrl !== undefined) {

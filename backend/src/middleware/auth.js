@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const { query } = require('../config/database');
 
 /**
  * Authentication Middleware
@@ -69,13 +70,31 @@ const optionalAuth = async (req, res, next) => {
     }
     
     next();
-  } catch (error) {
+  } catch {
     // Continue without auth
     next();
   }
 };
 
+/**
+ * Admin guard. The role is read from the database rather than the JWT so that
+ * revoking admin takes effect immediately instead of at token expiry.
+ * Must run after authMiddleware.
+ */
+const adminMiddleware = async (req, res, next) => {
+  try {
+    const { rows } = await query('SELECT role FROM users WHERE id = $1', [req.user.id]);
+    if (rows[0]?.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   authMiddleware,
-  optionalAuth
+  optionalAuth,
+  adminMiddleware
 };

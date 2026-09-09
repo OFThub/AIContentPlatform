@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Layout from '../components/Layout';
 import ContentCard from '../components/ContentCard';
-import { contentAPI, analyticsAPI } from '../services/api';
+import { contentAPI } from '../services/api';
 import { TrendingUp, Clock, Star, Sparkles } from 'lucide-react';
-import React from 'react';
+import Spinner from '../components/Spinner';
 
 export default function Home() {
   const [contents, setContents] = useState([]);
@@ -14,14 +14,12 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('recent');
 
-  useEffect(() => {
-    loadData();
-  }, [activeTab]);
-
-  const loadData = async () => {
+  // Declared before the effect and memoised on activeTab, so the effect can
+  // depend on it honestly instead of lying about its dependencies.
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      
+
       if (activeTab === 'recent') {
         const response = await contentAPI.getContents({ sortBy: 'recent', limit: 12 });
         setContents(response.data);
@@ -37,7 +35,11 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeTab]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const tabs = [
     { id: 'recent', label: 'Recent', icon: Clock },
@@ -54,13 +56,13 @@ export default function Home() {
             <Sparkles className="h-8 w-8 text-white" />
           </div>
         </div>
-        <h1 className="text-4xl font-bold text-gray-900 mb-4">
+        <h1 className="text-4xl font-bold text-ink mb-4">
           AI-Powered Content Platform
         </h1>
-        <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+        <p className="text-xl text-muted max-w-2xl mx-auto">
           Discover amazing content with semantic search, real-time analytics, and trending insights
         </p>
-        <div className="mt-6 flex justify-center space-x-4 text-sm text-gray-600">
+        <div className="mt-6 flex justify-center space-x-4 text-sm text-muted">
           <div className="flex items-center space-x-2">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
             <span>Semantic Search</span>
@@ -70,7 +72,7 @@ export default function Home() {
             <span>Real-time Analytics</span>
           </div>
           <div className="flex items-center space-x-2">
-            <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></div>
+            <div className="w-2 h-2 bg-primary-500 rounded-full animate-pulse"></div>
             <span>Advanced PostgreSQL</span>
           </div>
         </div>
@@ -87,7 +89,7 @@ export default function Home() {
               className={`flex items-center space-x-2 px-6 py-3 rounded-lg font-medium transition-all ${
                 activeTab === tab.id
                   ? 'bg-primary-600 text-white shadow-lg'
-                  : 'bg-white text-gray-700 hover:bg-gray-100'
+                  : 'bg-surface text-ink hover:bg-canvas'
               }`}
             >
               <Icon className="h-5 w-5" />
@@ -100,7 +102,7 @@ export default function Home() {
       {/* Loading State */}
       {loading && (
         <div className="flex justify-center items-center py-20">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+          <Spinner />
         </div>
       )}
 
@@ -127,8 +129,8 @@ export default function Home() {
         activeTab === 'recent' &&
         contents.length === 0 && (
           <div className="text-center py-20">
-            <p className="text-gray-500 text-lg">No content available yet</p>
-            <p className="text-gray-400 mt-2">Be the first to create content!</p>
+            <p className="text-muted text-lg">No content available yet</p>
+            <p className="text-muted mt-2">Be the first to create content!</p>
           </div>
         )}
     </Layout>

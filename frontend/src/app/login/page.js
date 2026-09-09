@@ -42,12 +42,12 @@ export default function Login() {
             <div className="inline-block p-3 bg-primary-600 rounded-2xl mb-4">
               <LogIn className="h-8 w-8 text-white" />
             </div>
-            <h2 className="text-3xl font-bold text-gray-900">Welcome Back</h2>
-            <p className="text-gray-600 mt-2">Sign in to your account</p>
+            <h2 className="text-3xl font-bold text-ink">Welcome Back</h2>
+            <p className="text-muted mt-2">Sign in to your account</p>
           </div>
 
           {/* Login Form */}
-          <div className="bg-white rounded-xl shadow-lg p-8">
+          <div className="bg-surface rounded-xl shadow-lg p-8">
             {error && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center space-x-2 text-red-700">
                 <AlertCircle className="h-5 w-5 shrink-0" />
@@ -57,7 +57,7 @@ export default function Login() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-ink mb-2">
                   Username or Email
                 </label>
                 <input
@@ -72,7 +72,7 @@ export default function Login() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-ink mb-2">
                   Password
                 </label>
                 <input
@@ -96,7 +96,7 @@ export default function Login() {
             </form>
 
             <div className="mt-6 text-center">
-              <p className="text-gray-600">
+              <p className="text-muted">
                 Don&apos;t have an account?{" "}
                 <Link
                   href="/register"

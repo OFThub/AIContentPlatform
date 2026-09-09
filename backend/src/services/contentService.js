@@ -1,6 +1,11 @@
 const { query, transaction } = require('../config/database');
-const { generateEmbedding, prepareContentForEmbedding, formatEmbeddingForDB } = require('../config/openai');
-const { setCache, delCachePattern } = require('../config/redis');
+const {
+  generateEmbedding,
+  prepareContentForEmbedding,
+  formatEmbeddingForDB,
+  generateContent: generateArticle,
+} = require('../config/openai');
+const { delCachePattern } = require('../config/redis');
 const slugify = require('slugify');
 
 /**
@@ -35,7 +40,9 @@ class ContentService {
         `INSERT INTO contents 
          (user_id, category_id, title, slug, body, content_type, embedding, published_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-         RETURNING *`,
+         RETURNING id, user_id, category_id, title, slug, body, content_type,
+                   status, view_count, like_count, comment_count, share_count,
+                   created_at, updated_at, published_at`,
         [userId, categoryId, title, slug, body, contentType, embeddingStr]
       );
       
@@ -73,51 +80,81 @@ class ContentService {
   }
   
   /**
-   * Get content by ID with related data
+   * Generate an article with the AI provider, then persist it through the
+   * normal create path so it gets a slug, an embedding and tag links like any
+   * other content.
    */
-  async getContentById(contentId, userId = null) {
+  async generateContent(userId, { topic, tone, length, categoryId, tags = [] }) {
+    const { title, body } = await generateArticle({ topic, tone, length });
+    return this.createContent(userId, { title, body, categoryId, contentType: 'article', tags });
+  }
+
+  /**
+   * Get content by numeric id or slug, with tags and the viewer's bookmark
+   * state. Accepting the slug is what makes the /content/<slug> links the
+   * cards have always produced actually resolve.
+   */
+  async getContentById(idOrSlug, userId = null) {
+    const key = String(idOrSlug);
     const result = await query(
       `WITH content_data AS (
-         SELECT 
-           c.*,
+         SELECT
+           c.id,
+           c.user_id,
+           c.category_id,
+           c.title,
+           c.slug,
+           c.body,
+           c.content_type,
+           c.status,
+           c.view_count,
+           c.like_count,
+           c.comment_count,
+           c.share_count,
+           c.created_at,
+           c.updated_at,
+           c.published_at,
            u.username,
            u.avatar_url,
            cat.name as category_name,
            cat.slug as category_slug,
            EXISTS(
-             SELECT 1 FROM bookmarks 
+             SELECT 1 FROM bookmarks
              WHERE content_id = c.id AND user_id = $2
            ) as is_bookmarked
          FROM contents c
          JOIN users u ON c.user_id = u.id
          LEFT JOIN categories cat ON c.category_id = cat.id
-         WHERE c.id = $1 AND c.status = 'published'
+         WHERE c.status = 'published'
+           AND (c.slug = $1 OR ($1 ~ '^[0-9]+$' AND c.id = $1::int))
        ),
-       content_tags AS (
-         SELECT 
+       tag_data AS (
+         SELECT
            ct.content_id,
            json_agg(json_build_object('id', t.id, 'name', t.name, 'slug', t.slug)) as tags
          FROM content_tags ct
          JOIN tags t ON ct.tag_id = t.id
-         WHERE ct.content_id = $1
+         WHERE ct.content_id IN (SELECT id FROM content_data)
          GROUP BY ct.content_id
        )
-       SELECT 
+       SELECT
          cd.*,
-         COALESCE(ct.tags, '[]'::json) as tags
+         COALESCE(td.tags, '[]'::json) as tags
        FROM content_data cd
-       LEFT JOIN content_tags ct ON cd.id = ct.content_id`,
-      [contentId, userId]
+       LEFT JOIN tag_data td ON cd.id = td.content_id`,
+      [key, userId]
     );
-    
+
     if (result.rows.length === 0) {
       return null;
     }
-    
-    // Log view event (async, don't wait)
-    this.logEvent(contentId, userId, 'view').catch(console.error);
-    
-    return result.rows[0];
+
+    const content = result.rows[0];
+
+    // Fire and forget: a failed view log must not fail the read.
+    this.logEvent(content.id, userId, 'view').catch(console.error);
+
+    return content;
   }
   
   /**
@@ -213,29 +250,41 @@ async getContents(filters = {}) {
         JOIN users u ON c.user_id = u.id
         LEFT JOIN categories cat ON c.category_id = cat.id
         WHERE ${whereClause}
-      ),
-      counted AS (
-        SELECT COUNT(*) as total FROM filtered_contents
       )
-      SELECT 
-        fc.*,
-        cnt.total
+      SELECT fc.*
       FROM filtered_contents fc
-      CROSS JOIN counted cnt
       ${orderByClause}
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
     
+
+    // Counted separately: reading the total off the first row made an
+    // out-of-range page report total 0 instead of the real count.
+    const countResult = await query(
+      `SELECT COUNT(*)::int AS total
+         FROM contents c
+         JOIN users u ON c.user_id = u.id
+         LEFT JOIN categories cat ON c.category_id = cat.id
+        WHERE ${whereClause}`,
+      [...params]
+    );
+    const total = countResult.rows[0].total;
+
+    // The keyword path never logged, so search_logs only ever held
+    // search_type='semantic' and the search analytics were half blind.
+    if (search) {
+      this.logSearch(search, 'keyword', total, filters.viewerId ?? null).catch(console.error);
+    }
+
     params.push(limit, offset);
-    
     const result = await query(queryText, params);
-    
+
     return {
       contents: result.rows,
-      total: parseInt(result.rows[0]?.total || 0),
+      total,
       page,
       limit,
-      totalPages: Math.ceil((result.rows[0]?.total || 0) / limit)
+      totalPages: Math.ceil(total / limit)
     };
   }
   
@@ -448,11 +497,21 @@ async getContents(filters = {}) {
         params.push(embeddingStr);
       }
       
+      // Without this, an update carrying no known field emits
+      // "SET , updated_at = NOW()" and Postgres rejects it as a syntax error.
+      if (updateFields.length === 0) {
+        const err = new Error('No updatable fields provided');
+        err.status = 400;
+        throw err;
+      }
+
       const result = await client.query(
         `UPDATE contents 
          SET ${updateFields.join(', ')}, updated_at = NOW()
          WHERE id = $1
-         RETURNING *`,
+         RETURNING id, user_id, category_id, title, slug, body, content_type,
+                   status, view_count, like_count, comment_count, share_count,
+                   created_at, updated_at, published_at`,
         params
       );
       
@@ -467,11 +526,21 @@ async getContents(filters = {}) {
    * Delete content
    */
   async deleteContent(contentId, userId) {
-    const result = await query(
-      'DELETE FROM contents WHERE id = $1 AND user_id = $2 RETURNING id',
-      [contentId, userId]
-    );
-    
+    // createContent increments tags.usage_count, so the delete has to give it
+    // back -- otherwise the counter only ever climbs. Done before the row goes,
+    // because the content_tags rows disappear with it via ON DELETE CASCADE.
+    const result = await transaction(async (client) => {
+      await client.query(
+        `UPDATE tags SET usage_count = GREATEST(usage_count - 1, 0)
+          WHERE id IN (SELECT tag_id FROM content_tags WHERE content_id = $1)`,
+        [contentId]
+      );
+      return client.query(
+        'DELETE FROM contents WHERE id = $1 AND user_id = $2 RETURNING id',
+        [contentId, userId]
+      );
+    });
+
     if (result.rows.length === 0) {
       throw new Error('Content not found or unauthorized');
     }
@@ -496,11 +565,11 @@ async getContents(filters = {}) {
   /**
    * Log search query
    */
-  async logSearch(searchQuery, searchType, resultsCount) {
+  async logSearch(searchQuery, searchType, resultsCount, userId = null) {
     await query(
-      `INSERT INTO search_logs (query, search_type, results_count)
-       VALUES ($1, $2, $3)`,
-      [searchQuery, searchType, resultsCount]
+      `INSERT INTO search_logs (query, search_type, results_count, user_id)
+       VALUES ($1, $2, $3, $4)`,
+      [searchQuery, searchType, resultsCount, userId]
     );
   }
   
@@ -534,7 +603,21 @@ async getContents(filters = {}) {
     
     const result = await query(
       `SELECT 
-         c.*,
+         c.id,
+           c.user_id,
+           c.category_id,
+           c.title,
+           c.slug,
+           c.body,
+           c.content_type,
+           c.status,
+           c.view_count,
+           c.like_count,
+           c.comment_count,
+           c.share_count,
+           c.created_at,
+           c.updated_at,
+           c.published_at,
          u.username,
          cat.name as category_name,
          b.created_at as bookmarked_at

@@ -144,8 +144,8 @@ class AnalyticsService {
            -- Consistency score: standard deviation of views
            STDDEV(c.view_count) as view_consistency
          FROM users u
-         LEFT JOIN contents c ON u.id = c.user_id AND c.status = 'published'
-         WHERE 1=1 ${categoryCondition}
+         LEFT JOIN contents c ON u.id = c.user_id AND c.status = 'published' ${categoryCondition}
+         WHERE 1=1
          GROUP BY u.id, u.username, u.avatar_url, u.reputation_score
          HAVING COUNT(c.id) > 0
        )
@@ -218,7 +218,7 @@ class AnalyticsService {
            AVG(results_count) as avg_results,
            DATE(created_at) as search_date
          FROM search_logs
-         WHERE created_at >= NOW() - $1 * INTERVAL '1 day'
+         WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
          GROUP BY query, search_type, DATE(created_at)
        ),
        ranked_searches AS (
